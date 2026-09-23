@@ -6,10 +6,13 @@ app.use(cors());
 const PORT = process.env.PORT || 3000;
 
 // Поиск треков в открытом каталоге Internet Archive (без ключей и регистрации)
+// Ограничиваем поиск разделами, где почти всегда есть полноценные mp3-файлы:
+// opensource_audio (независимая музыка), netlabels (нетлейблы), etree (концертные записи)
 app.get("/api/search", async (req, res) => {
   const q = req.query.q || "music";
   try {
-    const url = `https://archive.org/advancedsearch.php?q=mediatype:(audio)+AND+(${encodeURIComponent(q)})&fl[]=identifier&fl[]=title&fl[]=creator&rows=20&output=json`;
+    const collectionFilter = "(collection:(opensource_audio) OR collection:(netlabels) OR collection:(etree))";
+    const url = `https://archive.org/advancedsearch.php?q=mediatype:(audio)+AND+${collectionFilter}+AND+(${encodeURIComponent(q)})&fl[]=identifier&fl[]=title&fl[]=creator&rows=25&output=json`;
     const r = await fetch(url);
     const data = await r.json();
     const docs = data.response?.docs || [];
@@ -31,14 +34,14 @@ app.get("/api/track/:id", async (req, res) => {
     const r = await fetch(`https://archive.org/metadata/${id}`);
     const data = await r.json();
     const files = data.files || [];
-    const audioFile = files.find(
-      (f) => f.format === "VBR MP3" || f.name?.endsWith(".mp3")
-    );
+    const audioFile =
+      files.find((f) => f.format === "VBR MP3") ||
+      files.find((f) => f.name?.toLowerCase().endsWith(".mp3"));
     const imageFile = files.find(
       (f) => f.format === "JPEG" || f.format === "PNG" || f.name?.match(/\.(jpg|jpeg|png)$/i)
     );
     if (!audioFile) {
-      return res.status(404).json({ error: "У этого трека нет аудиофайла" });
+      return res.status(404).json({ error: "У этого трека нет доступного аудиофайла" });
     }
     res.json({
       streamUrl: `https://archive.org/download/${id}/${encodeURIComponent(audioFile.name)}`,
